@@ -5,13 +5,19 @@ jt.flags.nvcc_flags += '-lcusparse'
 jt.flags.use_cuda = 1
 
 def make_matrix(img, result_img, mask):
+    """构造线性方程对应项
+    """
     d, d_rev = [], {}
     x, y = mask.shape[:2]
+    
+    # 提取所有需要求解的位置
     for i in range(x):
         for j in range(y):
             if mask[i][j] == 1:
                 d_rev[i * y + j] = len(d)
                 d.append(i * y + j)
+                
+    # 提取求解位置对应的参数和迭代初值
     params, nps, vals, origin_img_vals = [], [], [], []
     for k in range(len(d)):
         idx = d[k]
@@ -32,9 +38,14 @@ def make_matrix(img, result_img, mask):
         nps.append(n_p)
         vals.append(val)
         origin_img_vals.append(result_img[i][j])
+        
     return d, d_rev, params, nps, vals, origin_img_vals
 
 def solve_matrix(params, nps, vals, origin_img_vals=None, params_val=None):
+    """使用Jacobi迭代法解方程
+    """
+    
+    # 构造Jacobi迭代的sparse矩阵参数
     size = len(nps)
     rows = []
     cols = []
@@ -51,10 +62,14 @@ def solve_matrix(params, nps, vals, origin_img_vals=None, params_val=None):
     outputs = []
     with jt.no_grad():
         for i in range(3):
+            
+            # 设置迭代初值
             if origin_img_vals is None:
                 vec = jt.array(np.ones((size, 1)))
             else: 
                 vec = jt.array(np.array([item[i] for item in origin_img_vals])[:, None])
+                
+            # Jacobi迭代求解
             vals_1d = jt.array(np.array([item[i] for item in vals_3d])[:, None])
             while True:
                 output = F.spmm(
@@ -75,6 +90,8 @@ def solve_matrix(params, nps, vals, origin_img_vals=None, params_val=None):
     return np.concatenate([output.numpy() for output in outputs], axis=-1)
 
 def test_solve():
+    """测试迭代正确性的接口
+    """
     params = [[1,2], [0,2], [0,1]]
     params_val = [[3,-2], [-4,1], [-6,-3]]
     nps = [8, 11, 12]
@@ -86,6 +103,7 @@ def poisson_blending(img, result_img, mask):
     d, d_rev, params, nps, vals, origin_img_vals = make_matrix(img, result_img, mask)
     x = solve_matrix(params, nps, vals, origin_img_vals=origin_img_vals)
     
+    # 根据求解得到的结果进行补全
     y = img.shape[1]
     for k, idx in enumerate(d):
         i, j = idx // y, idx % y

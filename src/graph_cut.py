@@ -1,6 +1,8 @@
 import numpy as np
 
 class Node:
+    """节点类
+    """
     def __init__(self, id, weight):
         self.id = id
         self.weight = weight
@@ -10,6 +12,8 @@ class Node:
         self.edges.append(node_id)
 
 class Graph:
+    """图类
+    """
     def __init__(self, img, result_img, mask, x_0, x_1, y_0, y_1):
         self.img = img
         self.result_img = result_img
@@ -25,6 +29,10 @@ class Graph:
         self._build_graph()
 
     def _build_graph(self):
+        """构建图
+            self.nodes: {id : node}
+            self.edges: {(left_id, right_id): weight}
+        """
         x, y = self.mask.shape[:2]
         dif = np.linalg.norm(self.img - self.result_img, axis=-1)
         
@@ -61,6 +69,8 @@ class Graph:
         self.total_weight = total_weight
                 
     def get_edge_weight(self, p, q, tree):
+        """获取对应边的权值
+        """
         if tree == 2:
             return self.edges[(p, q)]
         elif tree == 1:
@@ -69,6 +79,8 @@ class Graph:
             raise NotImplementedError
                      
     def graph_cut_tree(self):
+        """优化的双tree版本的graphcut
+        """
         print('doing graph cut...')
         s, t, a, o = [-2], [-1], [-2, -1], []
         parent, tree = {}, {-2:2, -1:1}
@@ -78,7 +90,6 @@ class Graph:
             print('cutting on', flow_sum, self.total_weight, end='\r')
             
             # growth
-            # print('grow')
             while len(a) > 0:
                 node_id = a[0]
                 node = self.nodes[node_id]
@@ -129,7 +140,6 @@ class Graph:
                         o.append(path[i])
             
             # adopt
-            # print('adopt')
             while len(o) > 0:
                 orphan_id = o[0]
                 orphan_node = self.nodes[orphan_id]
@@ -157,11 +167,7 @@ class Graph:
                         if tree.get(p_id, None) != tree[orphan_id]:
                             continue
                         weight = self.get_edge_weight(p_id, orphan_id, tree[orphan_id])
-                        # if weight > 0:
-                        #     if p_id in a:
-                        #         print('unawared1!!!')
                         if weight > 0 and not p_id in a:
-                            # print('add', p_id)
                             a.append(p_id)
                         if parent.get(p_id, None) == orphan_id:
                             if p_id in o:
@@ -169,16 +175,16 @@ class Graph:
                             o.append(p_id)
                             parent.pop(p_id)
                     tree.pop(orphan_id)
-                    # print('pop', orphan_id)
                     try:
                         orphan_idx = a.index(orphan_id)
                         a = a[:orphan_idx] + a[orphan_idx+1:]
                     except:
-                        # print('unawared3!!!')
                         pass
         print('graph cut done.')
                   
     def graph_cut_bfs(self):
+        """BFS版本的graphcut
+        """
         print('doing graph cut...')
         node_queue, pre_weight, pre_node = [-2], {-2: float('inf')}, {}
         flow_sum = 0
@@ -211,6 +217,8 @@ class Graph:
                 break
                         
     def graph_cut(self):
+        """DFS版本的graphcut
+        """
         print('doing graph cut...')
         node_queue, ranks, closed_nodes = [-2], [], []
         prev_r = 0
@@ -248,6 +256,8 @@ class Graph:
                 prev_r = 0     
     
     def generate_mask(self):
+        """根据graphcut完成的结果，搜索获取需要补全的区域mask
+        """
         i = 0
         x, y = self.mask.shape[:2]
         node_queue = [-2]
@@ -269,8 +279,15 @@ class Graph:
                 
 def graph_cut(img, result_img, mask, dilated_mask, x_0, x_1, y_0, y_1):
     combined_mask = mask + dilated_mask * 2
+    
+    # 建图
     graph = Graph(img, result_img, combined_mask, x_0, x_1, y_0, y_1)
+    
+    # 进行graphcut计算
     graph.graph_cut_tree()
+    
+    # 生成graphcut结果
     mask = graph.generate_mask()
+    
     return mask
     
